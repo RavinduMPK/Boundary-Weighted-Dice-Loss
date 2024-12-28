@@ -42,6 +42,7 @@ You can follow [TransUnet](https://github.com/Beckschen/TransUNet/blob/main/data
 
 ### 2. Environment
 Please prepare an environment with python=3.11, and then use the command "pip install -r requirements.txt" for the dependencies.
+Execute inside TransUNet folder.
 
 ### 3. Train/Test
 1. For Synapse dataset
