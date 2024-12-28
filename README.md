@@ -1,5 +1,5 @@
-# Boundary DoU Loss
-This repo holds code for Boundary Difference Over Union Loss For Medical Image Segmentation(MICCAI 2023).
+# Boundary-Weighted Dice Loss
+This repo holds code for Boundary-Weighted Dice Loss For Medical Image Segmentation.
 
 ## Usage
 
