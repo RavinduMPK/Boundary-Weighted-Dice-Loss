@@ -359,55 +359,84 @@ class DiceLoss(nn.Module):
 
 
 class BoundaryWeightedDiceLoss(nn.Module):
-    def __init__(self, lambda_weight=1.0):
+    def __init__(self, n_classes, lambda_weight=1.0):
         """
         Initialize the BoundaryWeightedDiceLoss class.
 
         Args:
+            n_classes (int): Number of classes for segmentation.
             lambda_weight (float): Weight for the boundary-sensitive term.
         """
         super(BoundaryWeightedDiceLoss, self).__init__()
+        self.n_classes = n_classes
         self.lambda_weight = lambda_weight
+
+    def _one_hot_encoder(self, input_tensor):
+        """
+        One-hot encode the input tensor.
+        
+        Args:
+            input_tensor (torch.Tensor): Ground truth tensor with shape (B, H, W).
+        
+        Returns:
+            torch.Tensor: One-hot encoded tensor with shape (B, C, H, W).
+        """
+        tensor_list = []
+        for i in range(self.n_classes):
+            temp_prob = input_tensor == i
+            tensor_list.append(temp_prob.unsqueeze(1))
+        output_tensor = torch.cat(tensor_list, dim=1)
+        return output_tensor.float()
 
     def dice_loss(self, y_pred, y_true, smooth=1e-5):
         """
-        Compute the Dice loss.
+        Compute the per-class Dice loss and average across classes.
+        """
+        dice_per_class = []
+        for c in range(self.n_classes):
+            intersection = torch.sum(y_pred[:, c] * y_true[:, c])
+            union = torch.sum(y_pred[:, c]) + torch.sum(y_true[:, c])
+            dice = (2.0 * intersection + smooth) / (union + smooth)
+            dice_per_class.append(1 - dice)
+        
+        return torch.mean(torch.stack(dice_per_class))
+
+
+    def gradient(self, tensor):
+        """
+        Compute gradient using Sobel filters for each channel.
         
         Args:
-            y_pred (torch.Tensor): Predicted tensor with shape (B, C, H, W).
-            y_true (torch.Tensor): Ground truth tensor with shape (B, C, H, W).
-            smooth (float): Smoothing constant to avoid division by zero.
+            tensor (torch.Tensor): Input tensor with shape (B, C, H, W).
         
         Returns:
-            torch.Tensor: Dice loss value.
+            torch.Tensor: Gradient magnitude tensor with shape (B, C, H, W).
         """
-        intersection = torch.sum(y_pred * y_true)
-        union = torch.sum(y_pred * y_pred) + torch.sum(y_true * y_true)
-        dice = (2.0 * intersection + smooth) / (union + smooth)
-        return 1 - dice
+        sobel_x = torch.tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32, device=tensor.device).view(1, 1, 3, 3)
+        sobel_y = torch.tensor([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=torch.float32, device=tensor.device).view(1, 1, 3, 3)
+        
+        gradients = []
+        for c in range(tensor.shape[1]):  # Process each channel separately
+            channel = tensor[:, c:c+1, :, :]  # Extract one channel (B, 1, H, W)
+            grad_x = F.conv2d(channel, sobel_x, padding=1)
+            grad_y = F.conv2d(channel, sobel_y, padding=1)
+            grad_magnitude = torch.sqrt(grad_x ** 2 + grad_y ** 2 + 1e-5)
+            gradients.append(grad_magnitude)
+        
+        return torch.cat(gradients, dim=1)  # Combine gradients for all channels (B, C, H, W)
 
     def boundary_term(self, y_pred, y_true):
         """
-        Compute the boundary-sensitive term based on gradients.
-        
-        Args:
-            y_pred (torch.Tensor): Predicted tensor with shape (B, 1, H, W).
-            y_true (torch.Tensor): Ground truth tensor with shape (B, 1, H, W).
-        
-        Returns:
-            torch.Tensor: Boundary-sensitive loss term.
+        Compute the boundary-sensitive term with overlap consideration.
         """
-        def gradient(tensor):
-            sobel_x = torch.tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32, device=tensor.device).view(1, 1, 3, 3)
-            sobel_y = torch.tensor([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=torch.float32, device=tensor.device).view(1, 1, 3, 3)
-            grad_x = F.conv2d(tensor, sobel_x, padding=1)
-            grad_y = F.conv2d(tensor, sobel_y, padding=1)
-            return torch.sqrt(grad_x ** 2 + grad_y ** 2 + 1e-5)
-
-        grad_pred = gradient(y_pred)
-        grad_true = gradient(y_true)
+        grad_pred = self.gradient(y_pred)
+        grad_true = self.gradient(y_true)
         boundary_loss = torch.mean(torch.abs(grad_true - grad_pred))
-        return boundary_loss
+        
+        # Add overlap term to emphasize boundary region matching
+        overlap = torch.sum(grad_pred * grad_true) / (torch.sum(grad_pred) + torch.sum(grad_true) + 1e-5)
+        return boundary_loss + (1 - overlap)
+        
 
     def forward(self, y_pred, y_true):
         """
@@ -421,7 +450,7 @@ class BoundaryWeightedDiceLoss(nn.Module):
             torch.Tensor: Combined loss value.
         """
         y_pred = torch.softmax(y_pred, dim=1)  # Apply softmax to predictions
-        y_true_one_hot = F.one_hot(y_true, num_classes=y_pred.shape[1]).permute(0, 3, 1, 2).float()  # Convert to one-hot encoding
+        y_true_one_hot = self._one_hot_encoder(y_true)  # Use custom one-hot encoder
 
         dice = self.dice_loss(y_pred, y_true_one_hot)
         boundary = self.boundary_term(y_pred[:, 1:], y_true_one_hot[:, 1:])  # Ignore background class for boundary term
