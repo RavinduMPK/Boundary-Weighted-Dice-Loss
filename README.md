@@ -66,19 +66,6 @@ CUDA_VISIBLE_DEVICES=0 python train.py --dataset ACDC --vit_name R50-ViT-B_16
 CUDA_VISIBLE_DEVICES=0 python test.py --dataset ACDC --vit_name R50-ViT-B_16 --is_savenii
 ```
 
-## Results
-Our results were trained and tested using five different seeds, with the final results being the average of the five runs. The seed settings and results for each run are shown in the table below. For example, for the ACDC dataset, we have
-
-| Seed | Loss | mean dice | mean hd95 | boundary IoU| 
-| - | :-: | -: | :-: | :-: |
-| 1234 | Boundary DoU| 91.40 | 2.20 | 78.71 |
-| 1111 | Boundary DoU | 91.22 | 2.41 | 78.04 |
-| 2222 | Boundary DoU | 91.16 | 2.08 | 78.75 |
-| 3333 | Boundary DoU | 91.41 | 2.00 | 78.33 |
-| 4444 | Boundary DoU | 91.30 | 2.16 | 78.47 |
-| mean | Boundary DoU | 91.30 | 2.17 | 78.46 |
-
-In the TransUNet model, the impact of seed selection on the results varies for different datasets, and different seeds can be tried for better results.
 
 ## Reference
 * [TransUNet](https://github.com/Beckschen/TransUNet)
