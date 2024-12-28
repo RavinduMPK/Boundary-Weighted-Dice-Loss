@@ -69,6 +69,7 @@ CUDA_VISIBLE_DEVICES=0 python test.py --dataset ACDC --vit_name R50-ViT-B_16 --i
 
 
 ## Reference
+* [Boundary Difference over Union (MICCAI 2023)](https://conferences.miccai.org/2023/papers/093-Paper1247.html)
 * [TransUNet](https://github.com/Beckschen/TransUNet)
 
 
